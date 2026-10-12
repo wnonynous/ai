@@ -1,12 +1,14 @@
+import {requestGroq,stripNulls} from './groq.js';
 import {config} from '../config.js';
 import {agentPlanSchema,type AgentPlan} from '../agent/schema.js';
 import {buildSystemPrompt} from '../agent/prompt.js';
 import type {HistoryMessage} from '../agent/memory.js';
 import type {Settings} from '../db/database.js';
-export const aiStatus={state:config.apinex.apiKey?'not_tested':'not_configured',lastSuccess:null as string|null};
-export function parsePlan(raw:string):AgentPlan {const s=raw.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');return agentPlanSchema.parse(JSON.parse(s.slice(s.indexOf('{'),s.lastIndexOf('}')+1)));}
+export const aiStatus={state:(config.aiProvider==='groq'?config.groq.apiKey:config.apinex.apiKey)?'not_tested':'not_configured',lastSuccess:null as string|null};
+export function parsePlan(raw:string):AgentPlan {const s=raw.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');return agentPlanSchema.parse(stripNulls(JSON.parse(s.slice(s.indexOf('{'),s.lastIndexOf('}')+1))));}
 const fallback=():AgentPlan=>({actions:[{type:'text',text:'Não consegui preparar uma resposta agora. Pode tentar novamente em instantes?'}]});
 export async function request(system:string,messages:HistoryMessage[],settings:Pick<Settings,'model'|'maxTokens'|'temperature'>,fetcher:typeof fetch=fetch):Promise<string>{
+ if(config.aiProvider==='groq'){try{const text=await requestGroq(system,messages,settings,fetcher);aiStatus.state='available';aiStatus.lastSuccess=new Date().toISOString();return text;}catch(e){aiStatus.state='unavailable';throw e;}}
  if(!config.apinex.apiKey)throw new Error('APInex não configurada.');
  for(let attempt=0;attempt<3;attempt++){
  try{const response=await fetcher(`${config.apinex.baseUrl}/v1/messages`,{method:'POST',headers:{'x-api-key':config.apinex.apiKey,'anthropic-version':'2023-06-01','Content-Type':'application/json'},body:JSON.stringify({model:settings.model,max_tokens:settings.maxTokens,system,messages,...(settings.temperature===null?{}:{temperature:settings.temperature})}),signal:AbortSignal.timeout(30000)});

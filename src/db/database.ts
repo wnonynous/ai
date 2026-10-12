@@ -22,7 +22,8 @@ export class Store {
    CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT,jid TEXT NOT NULL REFERENCES conversations(jid),role TEXT NOT NULL,content TEXT NOT NULL,type TEXT NOT NULL,button_id TEXT,created_at TEXT NOT NULL,source_id TEXT UNIQUE);
    CREATE INDEX IF NOT EXISTS messages_chat ON messages(jid,id);
    INSERT OR IGNORE INTO migrations VALUES(1);`);
-  this.db.prepare('INSERT OR IGNORE INTO settings VALUES(1,?)').run(JSON.stringify({name:config.agent.name,businessPrompt:config.agent.businessPrompt,model:config.apinex.model,maxTokens:config.apinex.maxTokens,temperature:null,maxHistoryMessages:config.agent.maxHistoryMessages,enabled:true}));
+  this.db.prepare('INSERT OR IGNORE INTO settings VALUES(1,?)').run(JSON.stringify({name:config.agent.name,businessPrompt:config.agent.businessPrompt,model:config.aiProvider==='groq'?config.groq.model:config.apinex.model,maxTokens:config.apinex.maxTokens,temperature:null,maxHistoryMessages:config.agent.maxHistoryMessages,enabled:true}));
+  if(config.aiProvider==='groq'&&this.settings().model.startsWith('free/'))this.saveSettings({...this.settings(),model:config.groq.model});
  }
  settings():Settings {return settingsSchema.parse(JSON.parse((this.db.prepare('SELECT value FROM settings WHERE id=1').get() as {value:string}).value));}
  saveSettings(value:unknown) {const s=settingsSchema.parse(value);this.db.prepare('UPDATE settings SET value=? WHERE id=1').run(JSON.stringify(s));return s;}

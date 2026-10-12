@@ -44,3 +44,12 @@ test('complete conversation service stores only successful sends and survives se
 });
 
 test('WhatsApp diagnostics classify failures without leaking raw secrets',async()=>{const {connectionDiagnostic}=await import('../src/whatsapp/diagnostics.js');assert.match(connectionDiagnostic(Object.assign(new Error('private token'),{code:'EACCES'})),/STORAGE_PERMISSION/);assert.match(connectionDiagnostic(new Error('getaddrinfo ENOTFOUND secret-host')),/DNS_FAILURE/);assert.match(connectionDiagnostic(new Error('Connection timeout')),/CONNECTION_TIMEOUT/);assert(!connectionDiagnostic(new Error('token=secret-password')).includes('secret-password'));});
+
+test('Groq sends Bearer auth and strict plan schema, parses null fields and reports HTTP errors',async()=>{
+ const {requestGroq,groqPlanSchema}=await import('../src/ai/groq.js');config.groq.apiKey='groq-unit-test';let captured:any;
+ try{const text=await requestGroq('Return JSON',[{role:'user',content:'Oi'}],{...settings,model:'openai/gpt-oss-20b'},(async(url:any,init:any)=>{assert.match(url,/chat\/completions$/);captured=init;return new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:'{"actions":[{"type":"text","text":"Oi"}]}'}}]}));}) as typeof fetch);
+ assert.equal(captured.headers.Authorization,'Bearer groq-unit-test');assert(!captured.headers['x-api-key']);const body=JSON.parse(captured.body);assert.equal(body.response_format.json_schema.strict,true);assert.equal(body.messages[0].role,'system');assert.equal(body.max_completion_tokens,2048);assert.equal(groqPlanSchema.additionalProperties,false);assert.equal(parsePlan(text).actions[0].type,'text');assert.equal(parsePlan('{"actions":[{"type":"image","url":"https://example.com/x","caption":null}]}').actions[0].type,'image');
+ await assert.rejects(requestGroq('JSON',[],{...settings,model:'openai/gpt-oss-20b'},(async()=>new Response('{}',{status:401})) as typeof fetch),/Groq HTTP 401/);
+ await assert.rejects(requestGroq('JSON',[],{...settings,model:'openai/gpt-oss-20b'},(async()=>new Response(JSON.stringify({choices:[{finish_reason:'length',message:{content:'{}'}}]}))) as typeof fetch),/truncada/);
+ }finally{config.groq.apiKey='';}
+});

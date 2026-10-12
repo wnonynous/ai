@@ -131,3 +131,9 @@ Consulte `VERIFICATION.md` para os comandos executados, resultados e testes não
 O projeto inclui Dockerfile Node 24, railway.toml e exclusões de upload. O build Docker instala dependências, verifica TypeScript e compila o backend. O container completo não foi construído localmente porque Docker não está disponível neste ambiente.
 
 Após `railway login`, crie/vincule o serviço, adicione um volume em `/data`, configure `APP_DATABASE_PATH=/data/app.db`, `BERRY_DATABASE_PATH=/data/berry.db`, `BERRY_AUTH_FOLDER=/data/auth`, credenciais administrativas, chave APInex, `NODE_ENV=production` e `TRUST_PROXY=1`. Use `railway up` para enviar a pasta sem GitHub. Gere um domínio HTTPS pelo Railway. Configure apenas uma réplica.
+
+## Groq (alternativa à APInex)
+
+Configure `AI_PROVIDER=groq`, `GROQ_API_KEY` e `GROQ_MODEL=openai/gpt-oss-20b` no Railway ou .env. Sem `AI_PROVIDER=groq`, APInex permanece ativa por compatibilidade. O modelo salvo no painel prevalece; modelos antigos com prefixo `free/` são migrados para GROQ_MODEL na inicialização quando Groq está ativa. Na página Agente, confirme o modelo e use max tokens 2048 ou mais se houver truncamento.
+
+A API Groq usa Bearer no backend e chat/completions. Modelos GPT OSS suportados utilizam JSON Schema estrito; opcionais viram null no schema de transporte e são removidos antes da validação Zod. Outros modelos usam JSON object mode e a mesma validação/reparo local. Nenhuma resposta é enviada diretamente ao WhatsApp sem validar. A chave não vai ao navegador. O teste de provedor pode retornar o código HTTP seguro (401: chave, 400: configuração, 429: cota, 5xx: serviço); nenhum corpo remoto é exibido. O plano gratuito tem limites, não é ilimitado. Testes Groq feitos com mock; conexão real exige sua chave.

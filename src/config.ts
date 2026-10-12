@@ -11,6 +11,12 @@ const bool = (value: string | undefined, fallback: boolean) => {
 };
 
 export const config = {
+  aiProvider: process.env.AI_PROVIDER === 'groq' ? 'groq' as const : 'apinex' as const,
+  groq: {
+    baseUrl: (process.env.GROQ_BASE_URL ?? 'https://api.groq.com/openai/v1').replace(/\/$/, ''),
+    apiKey: process.env.GROQ_API_KEY ?? '',
+    model: process.env.GROQ_MODEL ?? 'openai/gpt-oss-20b',
+  },
   apinex: {
     baseUrl: (process.env.APINEX_BASE_URL ?? "https://api.apinex.bond").replace(/\/$/, ""),
     apiKey: process.env.APINEX_API_KEY ?? "",

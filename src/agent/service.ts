@@ -18,7 +18,7 @@ export function receive(store:Store,wa:WhatsApp,message:IncomingMessage):Promise
  // Persist each action only after its send succeeds, avoiding false memory on partial failure.
  for(const action of plan.actions){await executePlan(wa.client,jid,message.id,{actions:[action]});store.add(jid,'assistant',summarizePlanForMemory({actions:[action]}),action.type);}
  console.log('[Agent] response sent');
- }catch{console.warn('[Agent] response failed');try{const text='Tive um problema para responder agora. Tente novamente em instantes.';await wa.client.sendText(jid,text);store.add(jid,'assistant',text,'text');}catch{console.warn('[WhatsApp] fallback send failed');}}
+ }catch(error){const message=error instanceof Error?error.message:'';const status=message.match(/^(Groq|APInex) HTTP (\d{3})$/);console.warn(status?`[Agent] response failed: ${status[1]} HTTP ${status[2]}`:'[Agent] response failed');try{const text='Tive um problema para responder agora. Tente novamente em instantes.';await wa.client.sendText(jid,text);store.add(jid,'assistant',text,'text');}catch{console.warn('[WhatsApp] fallback send failed');}}
  finally{await wa.client.sendPresence('paused',jid).catch(()=>{});}
  });
 }

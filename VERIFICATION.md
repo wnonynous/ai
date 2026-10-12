@@ -32,3 +32,5 @@ Data: 12/10/2026. Ambiente: Linux, Node.js 24.19.0.
 - **Mídias reais/carrossel:** schemas e proteção de destinos implementados; envio/download reais não foram testados com uma conta WhatsApp autenticada.
 
 Os testes não provam aceitação de cada formato por todas as versões do WhatsApp, nem disponibilidade do endpoint APInex/modelo na conta do usuário.
+
+Atualização Groq: adicionado teste de Bearer, endpoint, schema estrito, max tokens, campos null, HTTP 401 e resposta truncada. Nenhuma chave Groq disponível no ambiente; chamada real não realizada.
