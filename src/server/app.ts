@@ -1,0 +1,36 @@
+import express from 'express';
+import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
+import {rateLimit} from 'express-rate-limit';
+import {resolve} from 'node:path';
+import {z} from 'zod';
+import {Auth} from '../auth/auth.js';
+import type {Store} from '../db/database.js';
+import type {WhatsApp} from '../whatsapp/client.js';
+import {config} from '../config.js';
+import {aiStatus,request} from '../ai/apinex.js';
+export function createApp(store:Store,wa:WhatsApp){
+ const app=express();const auth=new Auth(store);
+ if(process.env.TRUST_PROXY==='1')app.set('trust proxy',1);
+ app.use(helmet());app.use(express.json({limit:'32kb'}));app.use(cookieParser());
+ app.use((req,res,next)=>{res.set('Cache-Control','no-store');if(!['GET','HEAD','OPTIONS'].includes(req.method)){const origin=req.get('origin');if(origin&&origin!==`${req.protocol}://${req.get('host')}`){res.status(403).json({error:'Origem não permitida.'});return;}}next();});
+ app.use('/api',rateLimit({windowMs:60_000,limit:120,standardHeaders:'draft-7',legacyHeaders:false}));
+ app.post('/api/login',rateLimit({windowMs:15*60_000,limit:10,legacyHeaders:false}), (req,res)=>{const parsed=z.object({email:z.string().min(3).max(254),password:z.string().min(1).max(256)}).safeParse(req.body);if(!parsed.success){res.status(400).json({error:'Dados inválidos.'});return;}if(!auth.login(parsed.data.email,parsed.data.password,res)){res.status(401).json({error:'Email ou senha inválidos.'});return;}res.json({ok:true});});
+ app.get('/login',(req,res)=>{if(auth.session(req)){res.redirect('/dashboard');return;}res.sendFile(resolve('public/index.html'));});
+ app.get('/assets/app.js',(_req,res)=>res.sendFile(resolve('public/app.js')));app.get('/assets/style.css',(_req,res)=>res.sendFile(resolve('public/style.css')));
+ app.get('/',(_req,res)=>res.redirect('/dashboard'));
+ app.use('/api',auth.protect,auth.csrf);
+ app.get('/api/session',(_req,res)=>res.json({email:res.locals.session.email,csrf:res.locals.session.csrf}));
+ app.post('/api/logout',(req,res)=>{auth.logout(req,res);res.json({ok:true});});
+ app.get('/api/dashboard',(_req,res)=>res.json({whatsapp:wa.status,model:store.settings().model,counts:store.counts(),apinex:aiStatus,enabled:store.settings().enabled}));
+ app.get('/api/whatsapp',async(_req,res)=>{res.json(await wa.snapshot());});
+ app.post('/api/whatsapp/:action',(req,res)=>{const action=z.enum(['connect','pairing','disconnect','reconnect','logout']).parse(req.params.action);const phone=action==='pairing'?z.string().regex(/^[1-9]\d{9,14}$/).parse(req.body.phone):undefined;wa.run(action,phone);res.status(202).json({ok:true});});
+ app.get('/api/agent',(_req,res)=>res.json(store.settings()));app.put('/api/agent',(req,res)=>res.json(store.saveSettings(req.body)));
+ app.get('/api/conversations',(_req,res)=>res.json(store.conversations()));app.get('/api/conversations/:jid', (req,res)=>{const before=req.query.before?z.coerce.number().int().positive().parse(req.query.before):undefined;res.json(store.messages(req.params.jid,before));});
+ app.get('/api/settings',(_req,res)=>res.json({apinexKey:config.apinex.apiKey?'Configurada':'Não configurada',baseUrl:config.apinex.baseUrl,allowedCtaHosts:config.agent.allowedCtaHosts,mediaHosts:process.env.ALLOWED_MEDIA_HOSTS??'',sessionId:config.berry.sessionId,aiStatus}));
+ app.post('/api/apinex/test',rateLimit({windowMs:60_000,limit:3}),async(_req,res)=>{try{await request('Responda OK',[{role:'user',content:'Teste de conexão.'}],{...store.settings(),maxTokens:64});res.json({ok:true});}catch{res.status(502).json({error:'APInex indisponível ou configuração inválida.',status:aiStatus});}});
+ app.get(['/dashboard','/whatsapp','/agent','/conversations','/settings'],auth.protect,(_req,res)=>res.sendFile(resolve('public/index.html')));
+ app.use((_req,res)=>res.status(404).json({error:'Rota não encontrada.'}));
+ app.use((err:unknown,_req:express.Request,res:express.Response,_next:express.NextFunction)=>{const invalid=err instanceof z.ZodError||err instanceof SyntaxError;console.warn('[Server] request failed');res.status(invalid?400:409).json({error:invalid?'Dados inválidos.':'Não foi possível executar a operação.'});});
+ return app;
+}
