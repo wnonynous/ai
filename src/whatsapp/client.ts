@@ -5,6 +5,7 @@ import {mkdirSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {readFile,rm} from 'node:fs/promises';
 import {config} from '../config.js';
+import {connectionDiagnostic} from './diagnostics.js';
 export class WhatsApp {
  client:BerryProtocol; status='disconnected'; qr?:string;pairingCode?:string;phone?:string;error?:string;
  private operation?:Promise<void>;
@@ -15,7 +16,7 @@ export class WhatsApp {
  this.client.on('connection.open',()=>{this.status='connected';this.qr=undefined;this.pairingCode=undefined;this.error=undefined;void readFile(join(config.berry.authFolder,config.berry.sessionId,'creds.json'),'utf8').then(raw=>{const id=JSON.parse(raw)?.me?.id;if(typeof id==='string')this.phone=id.split(':')[0].split('@')[0];}).catch(()=>{});console.log('[WhatsApp] connected');});
  this.client.on('connection.close',()=>{this.status='disconnected';this.qr=undefined;this.pairingCode=undefined;});
  this.client.on('connection.reconnecting',()=>{this.status='reconnecting';});
- this.client.on('auth.error',()=>{this.error='Falha na conexão/autenticação WhatsApp.';this.status='error';});
+ this.client.on('auth.error',({error})=>{this.error=connectionDiagnostic(error);this.status='error';console.warn('[WhatsApp] '+this.error);});
  }
  async snapshot(){return {status:this.status,phone:this.phone??null,qr:this.qr?await QRCode.toDataURL(this.qr):null,pairingCode:this.pairingCode??null,error:this.error??null};}
  run(action:'connect'|'pairing'|'disconnect'|'reconnect'|'logout',phone?:string){
@@ -24,8 +25,8 @@ export class WhatsApp {
  this.status=['disconnect','logout'].includes(action)?'disconnecting':'connecting';
  this.operation=(async()=>{
  let timeout:ReturnType<typeof setTimeout>|undefined;
- try{await Promise.race([(async()=>{switch(action){case 'connect':await this.client.connectWithQr();break;case 'pairing':await this.client.disconnect();await this.client.connectWithPairingCode(phone!);break;case 'disconnect':await this.client.disconnect();this.status='disconnected';break;case 'reconnect':await this.client.reconnect();break;case 'logout':await this.client.logout();await rm(join(config.berry.authFolder,config.berry.sessionId),{recursive:true,force:true});this.status='disconnected';this.phone=undefined;break;}})(),new Promise<void>((_,reject)=>{timeout=setTimeout(()=>reject(new Error('Connection timeout')),45000);})]);}
- catch{this.status='error';this.error='Não foi possível concluir a conexão. Verifique internet e tente novamente.';console.warn('[WhatsApp] connection failed');await this.client.disconnect().catch(()=>{});}
+ try{await Promise.race([(async()=>{switch(action){case 'connect':await this.client.connectWithQr();break;case 'pairing':await this.client.disconnect();await this.client.connectWithPairingCode(phone!);break;case 'disconnect':await this.client.disconnect();this.status='disconnected';break;case 'reconnect':await this.client.reconnect();break;case 'logout':await this.client.logout();await rm(join(config.berry.authFolder,config.berry.sessionId),{recursive:true,force:true});this.status='disconnected';this.phone=undefined;break;}})(),new Promise<void>((_,reject)=>{timeout=setTimeout(()=>reject(new Error('Connection timeout')),90000);})]);}
+ catch(error){const detail=this.error??connectionDiagnostic(error);await this.client.disconnect().catch(()=>{});this.status='error';this.error=detail;console.warn('[WhatsApp] '+detail);}
  finally{if(timeout)clearTimeout(timeout);this.operation=undefined;}})();
  }
 }

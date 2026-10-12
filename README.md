@@ -125,3 +125,9 @@ tests/         testes automatizados; mocks apenas nos testes
 ## Verificação e limites do ambiente de entrega
 
 Consulte `VERIFICATION.md` para os comandos executados, resultados e testes não concluídos. Testes automatizados usam doubles para evitar mensagens reais; a aplicação entregue usa BerryProtocol e APInex reais, sem modo mock. Autenticação completa de WhatsApp e envio real dependem do telefone do operador. Chamadas APInex reais dependem de sua chave. Não há credenciais reais incluídas no ZIP.
+
+## Railway sem GitHub
+
+O projeto inclui Dockerfile Node 24, railway.toml e exclusões de upload. O build Docker instala dependências, verifica TypeScript e compila o backend. O container completo não foi construído localmente porque Docker não está disponível neste ambiente.
+
+Após `railway login`, crie/vincule o serviço, adicione um volume em `/data`, configure `APP_DATABASE_PATH=/data/app.db`, `BERRY_DATABASE_PATH=/data/berry.db`, `BERRY_AUTH_FOLDER=/data/auth`, credenciais administrativas, chave APInex, `NODE_ENV=production` e `TRUST_PROXY=1`. Use `railway up` para enviar a pasta sem GitHub. Gere um domínio HTTPS pelo Railway. Configure apenas uma réplica.
